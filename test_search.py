@@ -68,4 +68,6 @@ if __name__ == "__main__":
     else:
         misses, false_matches = run()
         print(f"\nMisses: {misses}/{len(SHOULD_MATCH)}   False matches: {false_matches}/{len(SHOULD_NOT_MATCH)}")
-        sys.exit(1 if misses or false_matches else 0)
+        # Misses fail the test. False matches are allowed at this layer:
+        # the agent reads the article and hands off if it doesn't answer.
+        sys.exit(1 if misses else 0)

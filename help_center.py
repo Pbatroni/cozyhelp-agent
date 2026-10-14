@@ -10,9 +10,11 @@ from pathlib import Path
 
 ARTICLES_FILE = Path(__file__).resolve().parent / "data" / "articles.json"
 
-# An article needs at least this score to count as a match.
+# An article needs at least this score to be returned as a candidate.
 # Tuned with test_search.py (title word = 3, keyword = 2, body word = 1).
-MIN_SCORE = 7
+# Kept low so real questions aren't missed; the agent then reads the
+# article and hands off if it doesn't clearly answer the question.
+MIN_SCORE = 2
 
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "can", "do", "does", "for",

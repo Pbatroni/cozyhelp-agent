@@ -1,0 +1,3 @@
+strands-agents[litellm]
+python-dotenv
+gradio
