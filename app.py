@@ -6,7 +6,15 @@ from agent import answer
 
 
 def respond(message, history):
-    result = answer(message)
+    try:
+        result = answer(message)
+    except Exception as error:
+        # Graceful failure: never show a raw error to a shopper.
+        print(f"[ERROR] {type(error).__name__}: {error}")
+        return (
+            "Sorry, CozyHelp is having trouble right now. "
+            "Please try again in a little while, or contact our support team directly."
+        )
     reply = result["reply"]
     if result["handed_off"]:
         reply += "\n\n*(Handed off to the Cozy Cart support team.)*"
