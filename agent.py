@@ -9,8 +9,12 @@ from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
 
 import help_center
+import store
 
 load_dotenv()
+
+# The question being answered right now, so handoffs can record it.
+_current_question = ""
 
 
 @tool
@@ -38,12 +42,13 @@ def handoff_to_human(summary: str) -> str:
     `summary`: 2-3 sentences for the teammate: the shopper's question,
     what you already checked, and why you're handing off.
     """
-    # Demo only: a real version would assign the conversation in Front.
-    print(f"\n[HANDOFF] {summary}\n")
+    # Demo: saved to the Support team inbox. A real version would assign
+    # the conversation in Front.
+    store.save_handoff(_current_question, summary, reason="agent handed off")
     return "Handoff complete. A support teammate will take over."
 
 
-SYSTEM_PROMPT = """You are CozyHelp, the customer support assistant for Cozy Cart, an online retail store. You help shoppers with questions about orders, returns, refunds, shipping, and their account.
+SYSTEM_PROMPT = """You are CozyHelp, the customer support assistant for Cozy Cart, an online retail store. You help shoppers with questions about orders, returns, refunds, shipping, pre-orders, gift cards, promo codes, and their account.
 
 Your task, step by step:
 1. Read the shopper's question and figure out what they need.
@@ -52,7 +57,7 @@ Your task, step by step:
 4. Answer using only information from that article.
 
 Tool guidance:
-- Use search_help_center and get_article for every question about policies, returns, refunds, shipping, or accounts.
+- Use search_help_center and get_article for every question about policies, returns, refunds, shipping, pre-orders, gift cards, promo codes, or accounts.
 - search_help_center returns candidates. Read them with get_article and only answer if an article clearly answers the question.
 - If search_help_center returns "No matching articles.", or no article clearly answers the question, do not answer from memory. Tell the shopper you're connecting them with the support team and call handoff_to_human.
 
@@ -112,11 +117,13 @@ def tools_used(agent: Agent) -> list[str]:
 
 def answer(question: str) -> dict:
     """Answer one shopper question. Returns reply, handed_off, tools, and why."""
+    global _current_question
+    _current_question = question
     text = question.lower()
 
     # Safeguard 1 (before the model): specific orders and damaged/missing items go to a human.
     if ORDER_NUMBER.search(question) or any(word in text for word in NEEDS_HUMAN_WORDS):
-        handoff_to_human(f"Shopper wrote: {question!r}. Mentions a specific order or a damaged/missing item, which needs a person.")
+        store.save_handoff(question, "Mentions a specific order or a damaged/missing item, which needs a person.", reason="safeguard: order or damaged item")
         return {"reply": HANDOFF_MESSAGE, "handed_off": True, "tools": ["handoff_to_human"], "why": "safeguard: order or damaged item"}
 
     agent = build_agent()
@@ -128,7 +135,7 @@ def answer(question: str) -> dict:
     # Safeguard 2 (after the model): no handoff call, but it either said it's
     # connecting the shopper, or answered without citing a source.
     if "connecting you" in reply.lower() or "source:" not in reply.lower():
-        handoff_to_human(f"Shopper asked: {question!r}. The agent could not give an answer backed by a help center article.")
+        store.save_handoff(question, "The agent could not give an answer backed by a help center article.", reason="safeguard: no cited source")
         return {"reply": HANDOFF_MESSAGE, "handed_off": True, "tools": used + ["handoff_to_human"], "why": "safeguard: no cited source"}
 
     return {"reply": reply, "handed_off": False, "tools": used, "why": "answered from article"}

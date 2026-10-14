@@ -3,42 +3,140 @@
     "id": "returns-policy",
     "title": "Returns Policy",
     "url": "https://help.cozycart.example/returns-policy",
-    "keywords": ["return", "returns", "send back", "exchange", "return window"],
+    "keywords": [
+      "return",
+      "returns",
+      "send back",
+      "exchange",
+      "return window"
+    ],
     "body": "Most items can be returned within 30 days of delivery. Items must be unused and in their original packaging. Final sale items cannot be returned. To start a return, sign in to your account, open Orders, choose the item, and select Start a return. You will get a prepaid return label by email."
   },
   {
     "id": "refunds",
     "title": "Refunds",
     "url": "https://help.cozycart.example/refunds",
-    "keywords": ["refund", "money back", "reimburse", "credit"],
+    "keywords": [
+      "refund",
+      "money back",
+      "reimburse",
+      "credit"
+    ],
     "body": "Once we receive your return, we inspect it within 3 business days. Approved refunds go back to your original payment method. It can take 5 to 10 business days for the refund to appear, depending on your bank."
   },
   {
     "id": "shipping-delivery",
     "title": "Shipping and Delivery",
     "url": "https://help.cozycart.example/shipping-delivery",
-    "keywords": ["shipping", "delivery", "deliver", "ship", "arrive", "how long", "shipping cost"],
+    "keywords": [
+      "shipping",
+      "delivery",
+      "deliver",
+      "ship",
+      "arrive",
+      "how long",
+      "shipping cost"
+    ],
     "body": "Standard shipping takes 5 to 7 business days and is free on orders over $50. Express shipping takes 2 business days. We currently ship within the United States only."
   },
   {
     "id": "order-status",
     "title": "Order Status and Tracking",
     "url": "https://help.cozycart.example/order-status",
-    "keywords": ["order status", "track", "tracking", "where is my order", "package", "shipped"],
+    "keywords": [
+      "order status",
+      "track",
+      "tracking",
+      "where is my order",
+      "package",
+      "shipped"
+    ],
     "body": "You can check your order status anytime by signing in and opening Orders. Once your order ships, we email you a tracking number. Tracking can take up to 24 hours to update after shipping."
   },
   {
     "id": "account-password",
     "title": "Account and Password Help",
     "url": "https://help.cozycart.example/account-password",
-    "keywords": ["account", "password", "sign in", "log in", "login", "reset password", "forgot password", "email address"],
+    "keywords": [
+      "account",
+      "password",
+      "sign in",
+      "log in",
+      "login",
+      "reset password",
+      "forgot password",
+      "email address"
+    ],
     "body": "If you forgot your password, click Forgot password on the sign-in page and we will email you a reset link. The link expires after 1 hour. To change the email address on your account, sign in and go to Account settings."
   },
   {
     "id": "damaged-missing",
     "title": "Damaged or Missing Items",
     "url": "https://help.cozycart.example/damaged-missing",
-    "keywords": ["damaged", "broken", "missing", "wrong item", "never arrived", "defective"],
+    "keywords": [
+      "damaged",
+      "broken",
+      "missing",
+      "wrong item",
+      "never arrived",
+      "defective"
+    ],
     "body": "If an item arrived damaged, is missing, or is not what you ordered, please contact our support team within 14 days of delivery with your order number and a photo if possible. A team member will review it and help you."
+  },
+  {
+    "id": "pre-orders",
+    "title": "Pre-orders",
+    "url": "https://help.cozycart.example/pre-orders",
+    "keywords": [
+      "pre-order",
+      "preorder",
+      "pre order",
+      "coming soon",
+      "release date",
+      "back in stock"
+    ],
+    "body": "Some items marked Coming Soon can be pre-ordered. You are charged when you place the pre-order, and the item ships on or after its release date shown on the product page. You can cancel a pre-order anytime before it ships from the Orders page for a full refund to your original payment method."
+  },
+  {
+    "id": "gift-cards",
+    "title": "Gift Cards",
+    "url": "https://help.cozycart.example/gift-cards",
+    "keywords": [
+      "gift card",
+      "giftcard",
+      "gift card balance",
+      "redeem",
+      "e-gift"
+    ],
+    "body": "Cozy Cart digital gift cards are available from $10 to $200 and are delivered by email. To redeem one, enter the gift card code at checkout. You can check your balance on the Gift Cards page. Gift cards do not expire and cannot be exchanged for cash."
+  },
+  {
+    "id": "promo-codes",
+    "title": "Promo Codes and Discounts",
+    "url": "https://help.cozycart.example/promo-codes",
+    "keywords": [
+      "promo code",
+      "promo",
+      "coupon",
+      "discount",
+      "discount code",
+      "sale",
+      "code not working"
+    ],
+    "body": "Enter a promo code in the Promo code box at checkout. Only one promo code can be used per order, and codes cannot be applied to gift card purchases. If a code isn't working, check its expiration date and any minimum order amount listed in the offer."
+  },
+  {
+    "id": "order-changes",
+    "title": "Changing or Canceling an Order",
+    "url": "https://help.cozycart.example/order-changes",
+    "keywords": [
+      "cancel",
+      "cancel order",
+      "change order",
+      "change address",
+      "edit order",
+      "modify"
+    ],
+    "body": "You can cancel or change an order within 1 hour of placing it. Sign in, open Orders, choose the order, and select Cancel or Edit. After 1 hour, the order is being prepared and can't be changed, but you can return eligible items after delivery."
   }
 ]

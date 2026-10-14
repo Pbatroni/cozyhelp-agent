@@ -23,6 +23,10 @@ SHOULD_MATCH = [
     ("I forgot my password", "account-password"),
     ("How do I change the email on my account?", "account-password"),
     ("My order arrived damaged", "damaged-missing"),
+    ("Can I pre-order the winter jacket?", "pre-orders"),
+    ("How do I check my gift card balance?", "gift-cards"),
+    ("My promo code isn't working", "promo-codes"),
+    ("How do I cancel my order?", "order-changes"),
 ]
 
 # Off-topic questions that should find NOTHING
