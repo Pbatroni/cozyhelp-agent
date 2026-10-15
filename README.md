@@ -20,17 +20,19 @@ An AI customer support agent for **Cozy Cart**, a fictional online store. CozyHe
 
 ## How to run it
 
-Requires Python 3.10+ and a free [OpenRouter](https://openrouter.ai) API key.
+Requires **Python 3.10 or newer** and a free [OpenRouter](https://openrouter.ai) API key. Check with `python3 --version`; the Python that comes with macOS is often 3.9, which is too old. If yours is older, install 3.12 from [python.org](https://www.python.org/downloads/) or with [uv](https://docs.astral.sh/uv/) (`uv python install 3.12`).
 
 ```bash
 git clone https://github.com/Pbatroni/cozyhelp-agent.git
 cd cozyhelp-agent
-python3 -m venv .venv
+python3 -m venv .venv                                      # must be Python 3.10+
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install --only-binary cryptography -r requirements.txt
 cp .env.example .env        # then put your own OPENROUTER_API_KEY in .env
 python app.py               # opens the chat app in your browser
 ```
+
+`--only-binary cryptography` makes pip use a prebuilt version of the `cryptography` package. Without it, the install fails on Intel Macs, which have no prebuilt version of the newest release.
 
 Try it with the sample orders in `data/orders.json`, for example:
 > *I want to return the Wool sweater from order CC1001, my email is maya@example.com. It's too small.*
