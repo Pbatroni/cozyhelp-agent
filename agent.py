@@ -56,7 +56,7 @@ def lookup_order_status(order_id: str, email: str) -> str:
     order = returns.lookup_order(order_id, email)
     if order is None:
         return "No order matches that order number and email."
-    return json.dumps(order)
+    return json.dumps(returns.public_view(order))
 
 
 @tool
@@ -68,6 +68,23 @@ def request_return(order_id: str, email: str, item_name: str, reason: str) -> st
     approve it first. You cannot approve returns or send labels.
     """
     return json.dumps(returns.create_return_request(order_id, email, item_name, reason))
+
+
+# Deny by default: the agent gets only the tools listed here, with a note on
+# why each is allowed. Approving returns and sending labels are not tools at all.
+TOOL_PERMISSIONS = {
+    "search_help_center": "read-only: help center articles",
+    "get_article": "read-only: one help center article",
+    "lookup_order_status": "read-only: limited order fields, only when order number + email match",
+    "request_return": "create a PENDING request only; rate-limited; cannot approve or send",
+    "handoff_to_human": "write to the support inbox only",
+}
+ALL_TOOLS = {}  # filled in below
+
+
+def allowed_tools() -> list:
+    """Return only allowlisted tools. Anything not listed is denied."""
+    return [ALL_TOOLS[name] for name in TOOL_PERMISSIONS if name in ALL_TOOLS]
 
 
 SYSTEM_PROMPT = """You are CozyHelp, the customer support assistant for Cozy Cart, an online retail store. You help shoppers with questions about orders, returns, refunds, shipping, pre-orders, gift cards, promo codes, and their account.
@@ -103,8 +120,17 @@ Call handoff_to_human when:
 - The order is damaged or missing, or lookup_order_status can't find the order after the shopper rechecks their details.
 - The shopper is upset or asks for a person.
 
-When you hand off, tell the shopper: "I'm connecting you with a member of our support team who can help with this." Include a 2-3 sentence summary for the teammate: the shopper's question, what you already checked, and why you're handing off.
+When you hand off, tell the shopper: "I'm connecting you with a member of our support team who can help with this." Put the 2-3 sentence summary for the teammate (the shopper's question, what you already checked, and why you're handing off) ONLY in the handoff_to_human summary argument. Never include that summary or any internal notes in your reply to the shopper.
+- You cannot send or resend return labels. If asked to resend one, explain that labels are emailed automatically after a support teammate approves the return.
 """
+
+ALL_TOOLS.update({
+    "search_help_center": search_help_center,
+    "get_article": get_article,
+    "lookup_order_status": lookup_order_status,
+    "request_return": request_return,
+    "handoff_to_human": handoff_to_human,
+})
 
 
 def build_agent() -> Agent:
@@ -118,7 +144,7 @@ def build_agent() -> Agent:
     )
     return Agent(
         model=model,
-        tools=[search_help_center, get_article, lookup_order_status, request_return, handoff_to_human],
+        tools=allowed_tools(),
         system_prompt=SYSTEM_PROMPT,
         callback_handler=None,
     )
@@ -129,9 +155,24 @@ HANDOFF_MESSAGE = "I'm connecting you with a member of our support team who can 
 # Harness safeguards: these run in code, so they don't depend on the model obeying.
 # Claims that a return is already approved or a label already sent ("once it's approved" is fine).
 FALSE_APPROVAL = re.compile(
-    r"\b(has been|have been|is|was|been) approved\b|\bi(?:'ve| have)? approved\b|\blabel (has been|was|is being) sent\b|\bsent (you )?(the|a|your) (return )?label\b",
+    r"\b(has been|have been|was|got) approved\b|\bi(?:'ve| have)? approved\b|\bis now approved\b"
+    r"|\blabel (has been|was|is being|has been re-?) ?(re-?)?sent\b|\b(re-?)?sent (you )?(the|a|your|a new) (return )?label\b"
+    r"|\bi(?:'ve| have)? (re-?sent|resent)\b|\bresent\b",
     re.IGNORECASE,
 )
+# Internal handoff notes that must never reach the shopper.
+INTERNAL_NOTE = re.compile(r"\*{0,2}\s*(hand-?off summary|summary for (the )?(support|teammate))", re.IGNORECASE)
+
+NO_SEND_MESSAGE = ("I can't send or resend return labels myself. Once a support teammate approves "
+                   "your return, the label is emailed to you automatically.")
+
+
+def strip_internal_notes(reply: str) -> str:
+    """Cut the reply at the first internal handoff note, if any."""
+    match = INTERNAL_NOTE.search(reply)
+    return reply[: match.start()].rstrip() if match else reply
+
+
 NEEDS_HUMAN_WORDS = {"damaged", "broken", "missing", "defective", "wrong item", "never arrived"}
 
 
@@ -157,19 +198,23 @@ def answer(question: str) -> dict:
         return {"reply": HANDOFF_MESSAGE, "handed_off": True, "tools": ["handoff_to_human"], "why": "safeguard: damaged or missing item"}
 
     agent = build_agent()
-    reply = str(agent(question)).strip()
+    reply = strip_internal_notes(str(agent(question)).strip())
     used = tools_used(agent)
+
+    # Safeguard 3 (every reply): the agent can never approve, send, or resend.
+    # Only a person can, so replace any such claim with the true status.
+    if FALSE_APPROVAL.search(reply):
+        if "request_return" in used:
+            reply = ("Your return request has been submitted and is waiting for a support teammate to review it. "
+                     "You'll get a return label by email once it's approved.")
+        else:
+            reply = NO_SEND_MESSAGE
+        return {"reply": reply, "handed_off": "handoff_to_human" in used, "tools": used, "why": "safeguard: corrected false claim"}
+
     if "handoff_to_human" in used:
         return {"reply": reply, "handed_off": True, "tools": used, "why": "model handed off"}
 
     order_tools = {"lookup_order_status", "request_return"} & set(used)
-
-    # Safeguard 3: the model must never tell a shopper their return is approved.
-    # Only a person can approve, so replace any such claim with the true status.
-    if "request_return" in used and FALSE_APPROVAL.search(reply):
-        reply = ("Your return request has been submitted and is waiting for a support teammate to review it. "
-                 "You'll get a return label by email once it's approved.")
-        return {"reply": reply, "handed_off": False, "tools": used, "why": "safeguard: corrected approval claim"}
 
     # Safeguard 2 (after the model): no handoff call, but it either said it's
     # connecting the shopper, or gave a policy answer without citing a source.

@@ -52,6 +52,21 @@ check("label goes to the order's email", returns.outbox()[0]["to"] == "maya@exam
 again = returns.approve_return(r["request_id"], "Priscilla")
 check("approving twice doesn't send a second email", not again["ok"] and len(returns.outbox()) == 1)
 
+# Least privilege: the agent's view of an order hides the customer's email and prices
+view = returns.public_view(returns.lookup_order("CC1001", "maya@example.com"))
+check("order view hides the customer's email", "email" not in view)
+check("order view keeps status and items", view["status"] == "delivered" and view["items"][0]["name"] == "Wool sweater")
+check("order view hides item prices", "price" not in view["items"][0])
+
+# Rate limit: max 3 return requests per customer per hour
+returns.RETURNS_FILE.write_text("")
+results_rl = [returns.create_return_request("CC1001", "maya@example.com", name, "test")["ok"] for name in ("Wool sweater", "Knit scarf")]
+for r in returns.all_requests():
+    returns.reject_return(r["id"], "test")
+third = returns.create_return_request("CC1001", "maya@example.com", "Wool sweater", "again")
+fourth = returns.create_return_request("CC1001", "maya@example.com", "Knit scarf", "again")
+check("4th return request in an hour is blocked", all(results_rl) and third["ok"] and not fourth["ok"] and "Too many" in fourth["message"])
+
 # The agent has no way to approve or send
 import agent  # noqa: E402
 

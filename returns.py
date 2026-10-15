@@ -8,7 +8,7 @@ code, so no prompt or shopper message can talk the agent past it.
 
 import json
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -17,6 +17,13 @@ RETURNS_FILE = DATA_DIR / "returns.jsonl"
 OUTBOX_FILE = DATA_DIR / "outbox.jsonl"
 
 RETURN_WINDOW_DAYS = 30
+
+# Least privilege: the agent only ever sees these order fields (never the customer's email).
+ALLOWED_ORDER_FIELDS = {"order_id", "status", "delivered_date", "tracking_number", "items"}
+ALLOWED_ITEM_FIELDS = {"name", "final_sale"}
+
+# Rate limit: at most this many return requests per customer email per hour.
+RETURN_LIMIT_PER_HOUR = 3
 
 
 def _orders() -> list[dict]:
@@ -31,6 +38,13 @@ def lookup_order(order_id: str, email: str) -> dict | None:
         if order["order_id"] == order_id and order["email"].lower() == email:
             return order
     return None
+
+
+def public_view(order: dict) -> dict:
+    """Only the fields the agent needs to answer order questions."""
+    view = {k: v for k, v in order.items() if k in ALLOWED_ORDER_FIELDS}
+    view["items"] = [{k: v for k, v in i.items() if k in ALLOWED_ITEM_FIELDS} for i in order["items"]]
+    return view
 
 
 def check_eligibility(order: dict, item_name: str, today: date | None = None) -> tuple[bool, str, dict | None]:
@@ -70,6 +84,10 @@ def create_return_request(order_id: str, email: str, item_name: str, reason: str
         return {"ok": False, "message": why}
 
     requests = _read(RETURNS_FILE)
+    hour_ago = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+    recent = [r for r in requests if r["email"] == order["email"] and r["created"] >= hour_ago]
+    if len(recent) >= RETURN_LIMIT_PER_HOUR:
+        return {"ok": False, "message": "Too many return requests in the last hour. Please try again later or contact support."}
     for r in requests:
         if r["order_id"] == order["order_id"] and r["item"] == item["name"] and r["status"] in ("pending", "approved"):
             return {"ok": False, "message": f"A return for this item already exists ({r['id']}, {r['status']})."}
