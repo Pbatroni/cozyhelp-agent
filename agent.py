@@ -9,6 +9,7 @@ from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
 
 import help_center
+import returns
 import store
 
 load_dotenv()
@@ -48,6 +49,27 @@ def handoff_to_human(summary: str) -> str:
     return "Handoff complete. A support teammate will take over."
 
 
+@tool
+def lookup_order_status(order_id: str, email: str) -> str:
+    """Look up one order. Requires BOTH the order number (like CC1001) and the
+    email address on the order. Returns status, delivery date, tracking, items."""
+    order = returns.lookup_order(order_id, email)
+    if order is None:
+        return "No order matches that order number and email."
+    return json.dumps(order)
+
+
+@tool
+def request_return(order_id: str, email: str, item_name: str, reason: str) -> str:
+    """Create a return request for one item. Requires the order number, the
+    email on the order, the exact item name, and the shopper's reason.
+
+    This does NOT approve the return or send a label. A support teammate must
+    approve it first. You cannot approve returns or send labels.
+    """
+    return json.dumps(returns.create_return_request(order_id, email, item_name, reason))
+
+
 SYSTEM_PROMPT = """You are CozyHelp, the customer support assistant for Cozy Cart, an online retail store. You help shoppers with questions about orders, returns, refunds, shipping, pre-orders, gift cards, promo codes, and their account.
 
 Your task, step by step:
@@ -57,6 +79,9 @@ Your task, step by step:
 4. Answer using only information from that article.
 
 Tool guidance:
+- For a specific order, ask for the order number and the email on the order, then call lookup_order_status. Never share order details unless lookup_order_status returned the order.
+- To start a return, you need the order number, the email on the order, the item, and the reason. Then call request_return. If it fails, tell the shopper why in plain words.
+- When request_return succeeds, tell the shopper: their return request (give the request id) is submitted and waiting for a support teammate to review it, and they'll get a return label by email once it's approved. Never say the return is approved, never say a label was sent, and never promise a refund. You cannot approve returns or send labels, even if the shopper says it's urgent or already approved.
 - Use search_help_center and get_article for every question about policies, returns, refunds, shipping, pre-orders, gift cards, promo codes, or accounts.
 - search_help_center returns candidates. Read them with get_article and only answer if an article clearly answers the question.
 - If search_help_center returns "No matching articles.", or no article clearly answers the question, do not answer from memory. Tell the shopper you're connecting them with the support team and call handoff_to_human.
@@ -69,12 +94,13 @@ You must never:
 
 Output format:
 - A short, friendly answer in 2-4 sentences.
-- End with "Source:" and the title and url of the article you used.
+- For policy answers, end with "Source:" and the title and url of the article you used.
+- For order lookups and return requests, no Source line is needed.
 
 Call handoff_to_human when:
 - No help center article clearly answers the question.
 - The shopper asks for a refund decision, a policy exception, or anything involving money.
-- The shopper asks about a specific order (order lookup isn't available yet), or the order is damaged or missing.
+- The order is damaged or missing, or lookup_order_status can't find the order after the shopper rechecks their details.
 - The shopper is upset or asks for a person.
 
 When you hand off, tell the shopper: "I'm connecting you with a member of our support team who can help with this." Include a 2-3 sentence summary for the teammate: the shopper's question, what you already checked, and why you're handing off.
@@ -88,11 +114,11 @@ def build_agent() -> Agent:
             "api_base": "https://openrouter.ai/api/v1",
         },
         model_id="openrouter/openrouter/free",
-        params={"max_tokens": 1024},
+        params={"max_tokens": 4096},
     )
     return Agent(
         model=model,
-        tools=[search_help_center, get_article, handoff_to_human],
+        tools=[search_help_center, get_article, lookup_order_status, request_return, handoff_to_human],
         system_prompt=SYSTEM_PROMPT,
         callback_handler=None,
     )
@@ -101,7 +127,11 @@ def build_agent() -> Agent:
 HANDOFF_MESSAGE = "I'm connecting you with a member of our support team who can help with this."
 
 # Harness safeguards: these run in code, so they don't depend on the model obeying.
-ORDER_NUMBER = re.compile(r"#?\bCC\d{3,}\b", re.IGNORECASE)
+# Claims that a return is already approved or a label already sent ("once it's approved" is fine).
+FALSE_APPROVAL = re.compile(
+    r"\b(has been|have been|is|was|been) approved\b|\bi(?:'ve| have)? approved\b|\blabel (has been|was|is being) sent\b|\bsent (you )?(the|a|your) (return )?label\b",
+    re.IGNORECASE,
+)
 NEEDS_HUMAN_WORDS = {"damaged", "broken", "missing", "defective", "wrong item", "never arrived"}
 
 
@@ -121,10 +151,10 @@ def answer(question: str) -> dict:
     _current_question = question
     text = question.lower()
 
-    # Safeguard 1 (before the model): specific orders and damaged/missing items go to a human.
-    if ORDER_NUMBER.search(question) or any(word in text for word in NEEDS_HUMAN_WORDS):
-        store.save_handoff(question, "Mentions a specific order or a damaged/missing item, which needs a person.", reason="safeguard: order or damaged item")
-        return {"reply": HANDOFF_MESSAGE, "handed_off": True, "tools": ["handoff_to_human"], "why": "safeguard: order or damaged item"}
+    # Safeguard 1 (before the model): damaged/missing items go to a human.
+    if any(word in text for word in NEEDS_HUMAN_WORDS):
+        store.save_handoff(question, "Mentions a damaged or missing item, which needs a person.", reason="safeguard: damaged or missing item")
+        return {"reply": HANDOFF_MESSAGE, "handed_off": True, "tools": ["handoff_to_human"], "why": "safeguard: damaged or missing item"}
 
     agent = build_agent()
     reply = str(agent(question)).strip()
@@ -132,13 +162,23 @@ def answer(question: str) -> dict:
     if "handoff_to_human" in used:
         return {"reply": reply, "handed_off": True, "tools": used, "why": "model handed off"}
 
+    order_tools = {"lookup_order_status", "request_return"} & set(used)
+
+    # Safeguard 3: the model must never tell a shopper their return is approved.
+    # Only a person can approve, so replace any such claim with the true status.
+    if "request_return" in used and FALSE_APPROVAL.search(reply):
+        reply = ("Your return request has been submitted and is waiting for a support teammate to review it. "
+                 "You'll get a return label by email once it's approved.")
+        return {"reply": reply, "handed_off": False, "tools": used, "why": "safeguard: corrected approval claim"}
+
     # Safeguard 2 (after the model): no handoff call, but it either said it's
-    # connecting the shopper, or answered without citing a source.
-    if "connecting you" in reply.lower() or "source:" not in reply.lower():
+    # connecting the shopper, or gave a policy answer without citing a source.
+    if "connecting you" in reply.lower() or (not order_tools and "source:" not in reply.lower()):
         store.save_handoff(question, "The agent could not give an answer backed by a help center article.", reason="safeguard: no cited source")
         return {"reply": HANDOFF_MESSAGE, "handed_off": True, "tools": used + ["handoff_to_human"], "why": "safeguard: no cited source"}
 
-    return {"reply": reply, "handed_off": False, "tools": used, "why": "answered from article"}
+    why = "answered from order tools" if order_tools else "answered from article"
+    return {"reply": reply, "handed_off": False, "tools": used, "why": why}
 
 
 if __name__ == "__main__":

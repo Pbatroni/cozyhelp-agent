@@ -2,6 +2,7 @@
 
 import gradio as gr
 
+import returns
 import store
 from agent import answer
 
@@ -57,6 +58,30 @@ def inbox_view():
     return stats, handoff_rows, feedback_rows
 
 
+def returns_view():
+    pending = returns.pending_requests()
+    choices = [f"{r['id']} | {r['order_id']} | {r['item']} | ${r['price']:.2f}" for r in pending]
+    rows = [[r["id"], r["status"], r["order_id"], r["email"], r["item"], f"${r['price']:.2f}",
+             r["delivered_date"], r["eligibility"], r["shopper_reason"], r.get("reviewed_by", "")]
+            for r in returns.all_requests()]
+    sent = [[e["time"], e["to"], e["subject"]] for e in returns.outbox()]
+    note = f"**Waiting for approval:** {len(pending)}"
+    return note, gr.update(choices=choices, value=None), rows, sent
+
+
+def decide(choice, reviewer, approve):
+    """The checkpoint: only a person clicking here can approve and send a label."""
+    if not choice:
+        message = "Pick a pending return first."
+    elif not reviewer.strip():
+        message = "Enter your name as the reviewer."
+    else:
+        request_id = choice.split(" | ")[0]
+        action = returns.approve_return if approve else returns.reject_return
+        message = action(request_id, reviewer.strip())["message"]
+    return (message, *returns_view())
+
+
 with gr.Blocks(title="CozyHelp") as demo:
     gr.Markdown("# CozyHelp")
     with gr.Tab("Shopper chat"):
@@ -70,6 +95,7 @@ with gr.Blocks(title="CozyHelp") as demo:
             chatbot=chatbot,
             examples=[
                 "How do I return a sweater I bought last week?",
+                "I want to return the Wool sweater from order CC1001, my email is maya@example.com. It's too small.",
                 "Can I pre-order the winter jacket?",
                 "My promo code isn't working",
                 "What's your policy on returning gift card items bought during a flash sale?",
@@ -93,6 +119,29 @@ with gr.Blocks(title="CozyHelp") as demo:
         refresh.click(inbox_view, outputs=outputs)
         inbox_tab.select(inbox_view, outputs=outputs)
         demo.load(inbox_view, outputs=outputs)
+
+        gr.Markdown("### Return requests: human approval required")
+        gr.Markdown("CozyHelp can only *create* a return request. The label email is sent only when a teammate approves it here.")
+        returns_note = gr.Markdown()
+        pending_pick = gr.Dropdown(label="Pending return", choices=[])
+        reviewer = gr.Textbox(label="Your name (reviewer)")
+        with gr.Row():
+            approve_btn = gr.Button("Approve and send label", variant="primary")
+            reject_btn = gr.Button("Reject")
+        decision_msg = gr.Markdown()
+        returns_table = gr.Dataframe(
+            headers=["Request", "Status", "Order", "Customer email", "Item", "Price", "Delivered", "Eligibility check", "Shopper's reason", "Reviewed by"],
+            wrap=True, interactive=False,
+        )
+        gr.Markdown("### Sent emails (simulated outbox)")
+        outbox_table = gr.Dataframe(headers=["Time", "To", "Subject"], wrap=True, interactive=False)
+
+        returns_outputs = [returns_note, pending_pick, returns_table, outbox_table]
+        approve_btn.click(lambda c, r: decide(c, r, True), [pending_pick, reviewer], [decision_msg, *returns_outputs])
+        reject_btn.click(lambda c, r: decide(c, r, False), [pending_pick, reviewer], [decision_msg, *returns_outputs])
+        refresh.click(returns_view, outputs=returns_outputs)
+        inbox_tab.select(returns_view, outputs=returns_outputs)
+        demo.load(returns_view, outputs=returns_outputs)
 
 if __name__ == "__main__":
     demo.launch(inbrowser=True)

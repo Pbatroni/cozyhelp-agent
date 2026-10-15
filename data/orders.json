@@ -1,0 +1,40 @@
+[
+  {
+    "order_id": "CC1001",
+    "email": "maya@example.com",
+    "status": "delivered",
+    "delivered_date": "2026-10-05",
+    "items": [
+      {"name": "Wool sweater", "price": 45.00, "final_sale": false},
+      {"name": "Knit scarf", "price": 18.00, "final_sale": false}
+    ]
+  },
+  {
+    "order_id": "CC1002",
+    "email": "leo@example.com",
+    "status": "delivered",
+    "delivered_date": "2026-08-20",
+    "items": [
+      {"name": "Rain jacket", "price": 89.00, "final_sale": false}
+    ]
+  },
+  {
+    "order_id": "CC1003",
+    "email": "sam@example.com",
+    "status": "delivered",
+    "delivered_date": "2026-10-10",
+    "items": [
+      {"name": "Clearance boots", "price": 30.00, "final_sale": true}
+    ]
+  },
+  {
+    "order_id": "CC1004",
+    "email": "ana@example.com",
+    "status": "shipped",
+    "delivered_date": null,
+    "tracking_number": "1Z999AA10123456784",
+    "items": [
+      {"name": "Throw blanket", "price": 52.00, "final_sale": false}
+    ]
+  }
+]
