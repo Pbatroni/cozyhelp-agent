@@ -18,3 +18,6 @@ __pycache__/
 
 # Local shopper data (handoffs, feedback)
 data/*.jsonl
+
+# Captured agent traces
+traces/
