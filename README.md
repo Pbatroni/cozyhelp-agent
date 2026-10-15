@@ -20,7 +20,7 @@ An AI customer support agent for **Cozy Cart**, a fictional online store. CozyHe
 
 ## How to run it
 
-Requires **Python 3.10 or newer** and a free [OpenRouter](https://openrouter.ai) API key. Check with `python3 --version`; the Python that comes with macOS is often 3.9, which is too old. If yours is older, install 3.12 from [python.org](https://www.python.org/downloads/) or with [uv](https://docs.astral.sh/uv/) (`uv python install 3.12`).
+Requires **Python 3.10 or newer** and an API key: either an [Anthropic](https://console.anthropic.com) key (uses Claude Sonnet 5.5) or a free [OpenRouter](https://openrouter.ai) key. If `ANTHROPIC_API_KEY` is set, CozyHelp uses Claude. Check with `python3 --version`; the Python that comes with macOS is often 3.9, which is too old. If yours is older, install 3.12 from [python.org](https://www.python.org/downloads/) or with [uv](https://docs.astral.sh/uv/) (`uv python install 3.12`).
 
 ```bash
 git clone https://github.com/Pbatroni/cozyhelp-agent.git
@@ -28,7 +28,7 @@ cd cozyhelp-agent
 python3 -m venv .venv                                      # must be Python 3.10+
 source .venv/bin/activate
 pip install --only-binary cryptography -r requirements.txt
-cp .env.example .env        # then put your own OPENROUTER_API_KEY in .env
+cp .env.example .env        # then add your own ANTHROPIC_API_KEY or OPENROUTER_API_KEY
 python app.py               # opens the chat app in your browser
 ```
 

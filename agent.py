@@ -133,8 +133,15 @@ ALL_TOOLS.update({
 })
 
 
-def build_agent() -> Agent:
-    model = LiteLLMModel(
+def build_model() -> LiteLLMModel:
+    """Use Claude if an Anthropic key is set; otherwise the free OpenRouter model."""
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return LiteLLMModel(
+            client_args={"api_key": os.getenv("ANTHROPIC_API_KEY")},
+            model_id="anthropic/" + os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+            params={"max_tokens": 4096},
+        )
+    return LiteLLMModel(
         client_args={
             "api_key": os.getenv("OPENROUTER_API_KEY"),
             "api_base": "https://openrouter.ai/api/v1",
@@ -142,6 +149,10 @@ def build_agent() -> Agent:
         model_id="openrouter/openrouter/free",
         params={"max_tokens": 4096},
     )
+
+
+def build_agent() -> Agent:
+    model = build_model()
     return Agent(
         model=model,
         tools=allowed_tools(),
