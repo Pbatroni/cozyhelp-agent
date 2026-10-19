@@ -21,3 +21,6 @@ data/*.jsonl
 
 # Captured agent traces
 traces/
+
+# Lock file for return approvals
+data/*.lock

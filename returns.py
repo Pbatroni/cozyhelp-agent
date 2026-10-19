@@ -2,12 +2,14 @@
 
 The agent can look up an order and CREATE a return request. It cannot
 approve one or send a label: those functions are only called from the
-Support team inbox, by a person. That's the checkpoint, and it lives in
-code, so no prompt or shopper message can talk the agent past it.
+password-protected staff app, by a person. That's the checkpoint, and it
+lives in code, so no prompt or shopper message can talk the agent past it.
 """
 
+import fcntl
 import json
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +26,18 @@ ALLOWED_ITEM_FIELDS = {"name", "final_sale"}
 
 # Rate limit: at most this many return requests per customer email per hour.
 RETURN_LIMIT_PER_HOUR = 3
+
+
+@contextmanager
+def _locked():
+    """Only one process or click can change return requests at a time."""
+    lock_path = RETURNS_FILE.with_suffix(".lock")
+    with lock_path.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def _orders() -> list[dict]:
@@ -83,6 +97,11 @@ def create_return_request(order_id: str, email: str, item_name: str, reason: str
     if not eligible:
         return {"ok": False, "message": why}
 
+    with _locked():
+        return _create_locked(order, item, why, reason)
+
+
+def _create_locked(order: dict, item: dict, why: str, reason: str) -> dict:
     requests = _read(RETURNS_FILE)
     hour_ago = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
     recent = [r for r in requests if r["email"] == order["email"] and r["created"] >= hour_ago]
@@ -117,19 +136,28 @@ def all_requests() -> list[dict]:
 
 
 def _decide(request_id: str, approve: bool, reviewer: str) -> dict:
-    requests = _read(RETURNS_FILE)
-    for r in requests:
-        if r["id"] == request_id:
-            if r["status"] != "pending":
-                return {"ok": False, "message": f"{request_id} is already {r['status']}."}
-            r["status"] = "approved" if approve else "rejected"
-            r["reviewed_by"] = reviewer
-            r["reviewed"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            _write(RETURNS_FILE, requests)
-            if approve:
-                _send_label(r)
-            return {"ok": True, "message": f"{request_id} {r['status']}."}
-    return {"ok": False, "message": f"No request {request_id}."}
+    with _locked():
+        requests = _read(RETURNS_FILE)
+        request = next((r for r in requests if r["id"] == request_id), None)
+        if request is None:
+            return {"ok": False, "message": f"No request {request_id}."}
+        if request["status"] != "pending":
+            return {"ok": False, "message": f"{request_id} is already {request['status']}."}
+
+        if approve:
+            # Send first. If sending fails, the request stays pending so
+            # someone can try again. Sending is idempotent per request id,
+            # so a retry can never produce a second label.
+            try:
+                _send_label(request)
+            except Exception as error:
+                return {"ok": False, "message": f"Label could not be sent ({error}). {request_id} is still pending; try again."}
+
+        request["status"] = "approved" if approve else "rejected"
+        request["reviewed_by"] = reviewer
+        request["reviewed"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        _write(RETURNS_FILE, requests)
+        return {"ok": True, "message": f"{request_id} {request['status']}."}
 
 
 def approve_return(request_id: str, reviewer: str) -> dict:
@@ -143,8 +171,14 @@ def reject_return(request_id: str, reviewer: str) -> dict:
 
 
 def _send_label(request: dict) -> None:
-    """The irreversible step. Simulated: writes to a local outbox instead of real email."""
+    """The irreversible step. Simulated: writes to a local outbox instead of real email.
+
+    Idempotent: if a label for this request was already sent, do nothing.
+    """
+    if any(e.get("request_id") == request["id"] for e in _read(OUTBOX_FILE)):
+        return
     email = {
+        "request_id": request["id"],
         "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "to": request["email"],
         "subject": f"Your Cozy Cart return label ({request['id']})",
