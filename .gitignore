@@ -24,3 +24,6 @@ traces/
 
 # Lock file for return approvals
 data/*.lock
+
+# Hugging Face bundle
+space_build/
